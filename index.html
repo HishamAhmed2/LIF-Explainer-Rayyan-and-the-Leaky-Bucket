@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rayyan and the Leaky Bucket: a journey into the leaky integrate-and-fire neuron</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;800&family=Reem+Kufi:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E8F4F1; --card:#FFFFFF; --ink:#12264A; --muted:#566C86; --line:#C4DADD;
+  --water:#2B9CF2; --water2:#1C6FCB; --teal:#0F8A82; --saffron:#F5B52E; --coral:#E2503A; --plum:#7B4FA3;
+  --bucket:#F1F7FA; --stroke:#12264A; --ground:#D3EAE3; --sky:#F2FBF8; --soft:#EEF7F5; --on-accent:#12264A;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B1827; --card:#13263D; --ink:#E7F1F8; --muted:#9DB4CA; --line:#27425F;
+    --bucket:#1C3450; --stroke:#CFE5F5; --ground:#183846; --sky:#0F2236; --soft:#102338;
+    --teal:#2FB3A9; --coral:#FF7A63;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B1827; --card:#13263D; --ink:#E7F1F8; --muted:#9DB4CA; --line:#27425F;
+  --bucket:#1C3450; --stroke:#CFE5F5; --ground:#183846; --sky:#0F2236; --soft:#102338;
+  --teal:#2FB3A9; --coral:#FF7A63;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Nunito',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:17px;line-height:1.55}
+h1,h2,h3,.display{font-family:'Baloo 2','Nunito',system-ui,sans-serif;line-height:1.15;margin:0}
+.ar{font-family:'Reem Kufi','Noto Kufi Arabic','Noto Naskh Arabic',serif}
+.skip{position:absolute;left:-999px}.skip:focus{left:8px;top:8px;background:var(--card);padding:8px 12px;z-index:9;border-radius:8px}
+:focus-visible{outline:3px solid var(--saffron);outline-offset:2px}
+
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between;padding:14px clamp(14px,3vw,36px)}
+.brand{display:flex;align-items:baseline;gap:12px}
+.brand .ar{font-size:30px;font-weight:700;color:var(--teal)}
+.brand-t{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:19px}
+#nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.dot{border:2px solid var(--ink);background:transparent;color:var(--ink);width:14px;height:14px;border-radius:99px;padding:0;cursor:pointer;transition:width .25s,background .25s}
+.dot.done{background:var(--teal);border-color:var(--teal)}
+.dot.on{width:auto;height:auto;min-height:30px;padding:2px 14px;background:var(--ink);color:var(--card);font:700 14px 'Baloo 2',sans-serif;border-radius:99px}
+
+.grid{display:grid;grid-template-columns:minmax(0,1.12fr) minmax(0,1fr);gap:clamp(14px,2.4vw,32px);padding:6px clamp(14px,3vw,36px) 48px;max-width:1280px;margin:0 auto}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.stage{position:sticky;top:12px;align-self:start;background:var(--card);border-radius:26px;overflow:hidden;border:2px solid var(--ink)}
+@media(max-width:900px){.stage{position:relative;top:0}}
+.hud{position:absolute;left:12px;top:12px;display:flex;gap:8px;z-index:2;flex-wrap:wrap}
+.chip{background:var(--card);border:2px solid var(--ink);border-radius:99px;padding:2px 12px;font-weight:700;font-size:14px}
+.chip b{font-family:'Baloo 2',sans-serif;font-size:16px;margin-left:4px;font-variant-numeric:tabular-nums}
+#scene{display:block;width:100%;height:auto;font-family:'Nunito',sans-serif}
+.tracebox{margin:0;padding:10px 14px 14px;border-top:2px solid var(--ink);background:var(--soft)}
+.tracebox figcaption{font-weight:700;font-size:14px;color:var(--muted);margin-bottom:4px}
+#trace{width:100%;height:170px;display:block}
+.tracebox.tall #trace{height:200px}
+
+.side{min-width:0}
+.chead{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:flex-end;justify-content:space-between;margin-bottom:12px}
+.chead h1{font-size:clamp(28px,4vw,40px);font-weight:800}
+.word{display:flex;align-items:baseline;gap:8px;background:var(--saffron);color:var(--on-accent);padding:4px 14px;border-radius:99px;font-weight:700;font-size:14px}
+.word .ar{font-size:22px}
+.bubble{position:relative;background:var(--card);border:2px solid var(--ink);border-radius:20px;padding:26px 20px 16px;margin:18px 0 16px 14px}
+.bubble::before{content:"";position:absolute;left:-14px;top:34px;width:22px;height:22px;background:var(--card);border-left:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:rotate(45deg)}
+@media(max-width:900px){.bubble{margin-left:0}.bubble::before{left:34px;top:-13px;border:0;border-left:2px solid var(--ink);border-top:2px solid var(--ink)}}
+.tag{position:absolute;top:-14px;left:16px;background:var(--teal);color:#fff;font:700 15px 'Baloo 2',sans-serif;padding:1px 14px;border-radius:99px}
+.tag .ar{margin-left:6px}
+.bubble p{margin:0}
+.bubble p .ar{font-size:1.15em;color:var(--teal);font-weight:700}
+.pop{animation:pop .35s ease}
+@keyframes pop{0%{transform:scale(.97);opacity:.4}100%{transform:none;opacity:1}}
+
+.real{background:var(--soft);border-left:6px solid var(--water);border-radius:6px 18px 18px 6px;padding:12px 18px;margin:18px 0}
+.real h2{font-size:19px;margin-bottom:4px}
+.real p{margin:6px 0}
+.try{margin:14px 0 6px;font-weight:700}
+.controls{background:var(--card);border:2px solid var(--ink);border-radius:20px;padding:16px 18px;display:grid;gap:14px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{font:700 17px 'Baloo 2',sans-serif;border:2px solid var(--ink);border-radius:14px;padding:8px 18px;cursor:pointer;background:var(--card);color:var(--ink);transition:transform .08s}
+.btn:active{transform:translateY(2px)}
+.btn[disabled]{opacity:.4;cursor:default}
+.btn.pour{background:var(--saffron);color:var(--on-accent);font-size:20px;padding:10px 24px;box-shadow:0 4px 0 var(--ink)}
+.btn.pour:active{box-shadow:0 1px 0 var(--ink);transform:translateY(3px)}
+.btn.dark{background:var(--ink);color:var(--card)}
+.btn.teal{background:var(--teal);color:#fff}
+.pager{display:flex;justify-content:space-between;gap:10px;margin-top:20px;flex-wrap:wrap}
+.sl{display:grid;gap:2px}
+.sl-top{display:flex;justify-content:space-between;font-weight:700}
+.sl output{font-family:'Baloo 2',sans-serif;color:var(--teal);font-variant-numeric:tabular-nums}
+.sl input{width:100%;accent-color:var(--teal);height:28px}
+.ends{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}.ends i{font-style:normal}
+.chk{display:flex;gap:8px;align-items:center;font-weight:700}
+.chk input{width:20px;height:20px;accent-color:var(--teal)}
+.read{margin:0;background:var(--soft);border-radius:12px;padding:8px 12px;font-weight:600;min-height:3.2em}
+.trio{display:grid;gap:10px}
+.trio div{background:var(--card);border:2px solid var(--ink);border-left-width:8px;border-radius:12px;padding:8px 14px}
+.trio div:nth-child(1){border-left-color:var(--water)}
+.trio div:nth-child(2){border-left-color:var(--teal)}
+.trio div:nth-child(3){border-left-color:var(--coral)}
+.trio h3{font-size:20px}.trio p{margin:0}
+
+.eq{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-family:'Baloo 2',sans-serif;font-size:22px;justify-content:center;margin:2px 0 4px}
+.eq button,.rule-btn{font:inherit;border:2px solid var(--ink);border-radius:12px;padding:2px 12px;background:var(--card);color:var(--ink);cursor:pointer}
+.eq button.on,.rule-btn.on{background:var(--saffron);color:var(--on-accent)}
+.eq sub{font-size:.65em}
+.rule-btn{font-size:16px;font-weight:700;justify-self:center}
+#eqx{margin:0;min-height:5.4em;background:var(--soft);border-radius:12px;padding:8px 12px;font-size:16px}
+#fi{width:100%;height:150px;display:block}
+
+.quiz h3{font-size:21px;margin-bottom:8px}
+.opt{display:block;width:100%;text-align:left;font:600 16px 'Nunito',sans-serif;border:2px solid var(--ink);border-radius:12px;padding:8px 12px;margin:6px 0;background:var(--card);color:var(--ink);cursor:pointer}
+.opt.ok{background:#CDEFD9;border-color:#1E7B47;color:#0E3B22}
+.opt.bad{background:#FADAD3;border-color:#B23A28;color:#4A150C}
+.why{margin:8px 0;font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-family:'Baloo 2',sans-serif}
+.tablewrap{overflow-x:auto}
+ul.next{padding-left:20px;margin:6px 0}
+
+/* ---- scene animation ---- */
+.wave{animation:wave 2.6s linear infinite}
+@keyframes wave{to{transform:translateX(-100px)}}
+#eyes{transform-origin:70px 78px;animation:blink 5.5s infinite}
+@keyframes blink{0%,94%,100%{transform:scaleY(1)}97%{transform:scaleY(.1)}}
+#armR{transform-origin:98px 122px}
+#armR.waving{animation:armwave .7s ease-in-out infinite alternate}
+@keyframes armwave{from{transform:rotate(-30deg)}to{transform:rotate(14deg)}}
+#cup{opacity:0;transform-origin:0 17px}
+#cup.pour{animation:pour 1s ease both}
+@keyframes pour{0%{opacity:0;transform:translateY(-70px) rotate(0)}22%{opacity:1;transform:translateY(0) rotate(0)}45%{opacity:1;transform:rotate(-80deg)}80%{opacity:1;transform:rotate(-80deg)}100%{opacity:0;transform:translateY(-70px) rotate(0)}}
+#pourStream{opacity:0;stroke-dasharray:6 6}
+#pourStream.run{animation:streamfx 1s linear both}
+@keyframes streamfx{0%,40%{opacity:0;stroke-dashoffset:0}50%{opacity:1}80%{opacity:1;stroke-dashoffset:-48}90%,100%{opacity:0;stroke-dashoffset:-60}}
+#ladle{opacity:0}
+#ladle.scoop{animation:scoop 1s ease both}
+@keyframes scoop{0%{opacity:0;transform:translate(0,-40px)}30%{opacity:1;transform:translate(0,30px)}60%{opacity:1;transform:translate(0,30px)}100%{opacity:0;transform:translate(0,-70px)}}
+#bucketG{transform-origin:400px 330px;transform-box:view-box}
+#bucketG.tip{animation:tip .9s ease}
+@keyframes tip{0%{transform:rotate(0)}30%,65%{transform:rotate(24deg)}100%{transform:rotate(0)}}
+#bell{transform-origin:0 -14px}
+#bell.ring{animation:ring .8s ease}
+@keyframes ring{0%,100%{transform:rotate(0)}15%{transform:rotate(22deg)}35%{transform:rotate(-20deg)}55%{transform:rotate(14deg)}75%{transform:rotate(-8deg)}}
+#msg{opacity:0}
+#msg.go{animation:go 1s ease-in both}
+@keyframes go{0%{opacity:1;transform:translateX(0)}85%{opacity:1}100%{opacity:0;transform:translateX(104px)}}
+#nextW.flash{animation:flash .8s}
+@keyframes flash{0%{fill:var(--saffron)}100%{fill:var(--water)}}
+.drop{animation:fall var(--rd,.9s) linear infinite}
+@keyframes fall{from{transform:translateY(0)}to{transform:translateY(140px)}}
+#stream{stroke-dasharray:8 5;animation:flow .5s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-13}}
+.hl{animation:glow 1s ease-in-out 3}
+@keyframes glow{0%,100%{filter:none}50%{filter:drop-shadow(0 0 7px var(--saffron)) drop-shadow(0 0 3px var(--saffron))}}
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.01ms !important;animation-iteration-count:1 !important}
+}
+
+/* ---- calmer layout ---- */
+.progress{display:flex;align-items:center;gap:12px;font-weight:700;font-size:15px;color:var(--muted)}
+.pbar{width:clamp(110px,18vw,200px);height:8px;border-radius:99px;background:var(--line);overflow:hidden}
+.pbar i{display:block;height:100%;width:0;background:var(--teal);border-radius:99px;transition:width .4s}
+.stagebar{display:flex;justify-content:flex-end;padding:8px 12px;background:var(--soft);border-top:2px solid var(--ink)}
+.stagebar[hidden]{display:none}
+.btn.small{font-size:14px;padding:3px 12px;border-radius:10px;box-shadow:none}
+.side h1{font-size:clamp(26px,3.4vw,34px);font-weight:800;margin-bottom:2px}
+.bubble{font-size:18px;margin-top:22px}
+.word{display:inline-flex;margin-top:18px;font-size:13px;padding:2px 12px;background:transparent;border:2px dashed var(--saffron);color:var(--ink);font-weight:600}
+details.more,details.real{margin:12px 0}
+details summary{cursor:pointer;font-weight:700;padding:8px 2px;list-style:none;display:flex;align-items:center;gap:8px}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:"+";display:inline-grid;place-items:center;width:22px;height:22px;border:2px solid var(--ink);border-radius:99px;font-weight:800;line-height:1}
+details[open]>summary::before{content:"\2212"}
+details.more .morebody{background:var(--card);border:2px solid var(--ink);border-radius:16px;padding:14px 16px;display:grid;gap:12px}
+details.real{background:transparent;border:0;padding:0}
+details.real>summary{color:var(--water2)}
+details.real[open]{background:var(--soft);border-left:6px solid var(--water);border-radius:6px 18px 18px 6px;padding:2px 18px 10px}
+details.real>p{margin:6px 0}
+.btn.nudge{animation:nudge 1.5s ease-in-out infinite}
+@keyframes nudge{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+
+.legendbox{margin:14px 0;background:var(--card);border:2px solid var(--ink);border-radius:16px;padding:12px 16px}
+.legendbox h3{font-size:19px;margin-bottom:6px}
+.legend{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.legend li{display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:center;font-size:16px}
+.sw{display:block;justify-self:center}
+.sw.line{width:30px;height:0;border-top:4px solid var(--water);border-radius:2px}
+.sw.dash{width:30px;height:0;border-top:3px dashed var(--coral)}
+.sw.bar{width:6px;height:24px;background:var(--coral);border-radius:3px}
+.sw.fall{font-style:normal;font-weight:800;font-size:22px;color:var(--ink);line-height:1}
+
+.meter{display:flex;align-items:stretch;gap:8px;justify-content:center;flex-wrap:wrap}
+.meter .m{background:var(--soft);border:2px solid var(--ink);border-radius:14px;padding:6px 14px;min-width:104px;text-align:center}
+.meter .m small{display:block;font-weight:700;font-size:13px;color:var(--muted)}
+.meter .m b{font-family:'Baloo 2',sans-serif;font-size:22px;font-variant-numeric:tabular-nums}
+.meter .in{border-color:var(--water2)}.meter .in b{color:var(--water2)}
+.meter .out{border-color:var(--teal)}.meter .out b{color:var(--teal)}
+.meter .op{align-self:center;font:800 26px 'Baloo 2',sans-serif}
+/* Same equation direction as Chapter 8, maintained on small screens. */
+.meter.meter-equation{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr);gap:6px;align-items:stretch}
+.meter.meter-equation .m{min-width:0;padding:6px 7px}
+.meter.meter-equation .m b{font-size:clamp(16px,4vw,22px);overflow-wrap:anywhere}
+.meter.meter-equation .op{font-size:23px}
+#mNet.up{color:var(--water2)}#mNet.down{color:var(--coral)}#mNet.flat{color:var(--teal)}
+.eq button{display:flex;flex-direction:column;align-items:center;line-height:1.2}
+.eq button .sym{font-size:22px}
+.eq button small,.rule-btn small{font:700 12px 'Nunito',sans-serif;color:var(--muted)}
+.eq button.on small,.rule-btn.on small{color:var(--on-accent)}
+.words{margin:2px 0 0;text-align:center;font-weight:600}
+
+[hidden]{display:none !important}
+.bridge{margin:10px 2px 0;color:var(--muted);font-weight:700}
+.builder{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:6px 8px;align-items:stretch}
+.bh{font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);border-bottom:3px solid var(--line);padding-bottom:3px}
+.bh1{grid-column:1}.bh2{grid-column:3 / 6}
+.bcol{border:2px solid var(--ink);border-radius:14px;padding:6px 6px 8px;text-align:center;background:var(--soft);min-width:0}
+.bcol.in{border-color:var(--water2)}.bcol.out{border-color:var(--teal)}
+.bword{font-weight:700;font-size:13px;color:var(--muted)}
+.bsym{font:700 22px 'Baloo 2',sans-serif;min-height:36px;line-height:1.5;overflow-wrap:anywhere}
+.bsym.empty{opacity:.3}
+.bcol.in .bsym{color:var(--water2)}.bcol.out .bsym{color:var(--teal)}
+.bsym sub{font-size:.65em}
+.bnum{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted);min-height:1.4em}
+.bop{align-self:center;font:800 26px 'Baloo 2',sans-serif}
+.final{background:var(--soft);border-radius:14px;padding:8px 14px;text-align:center}
+.final p{margin:6px 0;font-size:15.5px}
+.feq{font:700 24px 'Baloo 2',sans-serif}
+.feq sub{font-size:.65em}
+.c-net{color:var(--ink)}.c-in{color:var(--water2)}.c-out{color:var(--teal)}
+.check{font-weight:700}
+.stepper{justify-content:space-between;border-top:2px solid var(--line);padding-top:12px}
+#eqPos{font-weight:700;color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<a class="skip" href="#panel">Skip to chapter text</a>
+<header class="top">
+  <div class="brand"><span class="ar" lang="ar" dir="rtl">ريّان</span><span class="brand-t">Rayyan and the Leaky Bucket</span></div>
+  <div class="progress" aria-live="polite"><span id="ptext"></span><div class="pbar"><i id="pfill"></i></div></div>
+</header>
+
+<main class="grid">
+  <section class="stage" aria-label="Animated scene">
+    <div class="hud" id="hud">
+      <span class="chip">Water level <b id="hudV">-70.0 mV</b></span>
+      <span class="chip" id="hudS">Splashes <b id="hudN">0</b></span>
+    </div>
+    <svg id="scene" viewBox="0 0 600 420" role="img" aria-label="Rayyan, a cartoon water carrier, stands beside a bucket on a stool. The bucket has a small hole near the bottom.">
+      <defs>
+        <pattern id="tiles" width="44" height="44" patternUnits="userSpaceOnUse">
+          <g fill="none" stroke="var(--line)" stroke-width="1.2"><rect x="11" y="11" width="22" height="22"/><rect x="11" y="11" width="22" height="22" transform="rotate(45 22 22)"/></g>
+        </pattern>
+        <linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--water)"/><stop offset="1" stop-color="var(--water2)"/></linearGradient>
+        <clipPath id="inside"><path d="M270 140 L420 140 L400 330 L290 330 Z"/></clipPath>
+        <clipPath id="miniIn"><path d="M522 185 L578 185 L570 250 L530 250 Z"/></clipPath>
+        <clipPath id="rainClip"><rect x="230" y="0" width="230" height="150"/></clipPath>
+      </defs>
+      <rect width="600" height="420" fill="var(--sky)"/>
+      <rect width="600" height="420" fill="url(#tiles)" opacity=".3"/>
+      <rect y="372" width="600" height="48" fill="var(--ground)"/>
+      <line x1="0" x2="600" y1="372" y2="372" stroke="var(--stroke)" stroke-width="3"/>
+
+      <!-- rain -->
+      <g id="rain" clip-path="url(#rainClip)" style="display:none"></g>
+
+      <!-- stool -->
+      <g stroke="var(--stroke)" stroke-width="3" fill="#B9824F">
+        <rect x="278" y="330" width="134" height="12" rx="4"/>
+        <rect x="294" y="342" width="12" height="30"/><rect x="384" y="342" width="12" height="30"/>
+      </g>
+
+      <!-- axon to next bucket -->
+      <g id="axonG" style="display:none">
+        <line x1="414" y1="200" x2="522" y2="200" stroke="var(--stroke)" stroke-width="6" stroke-linecap="round"/>
+        <line x1="414" y1="200" x2="522" y2="200" stroke="var(--card)" stroke-width="2" stroke-linecap="round"/>
+        <circle id="msg" cx="418" cy="200" r="7" fill="var(--saffron)" stroke="var(--stroke)" stroke-width="2"/>
+        <path d="M522 185 L578 185 L570 250 L530 250 Z" fill="var(--bucket)" stroke="var(--stroke)" stroke-width="3" stroke-linejoin="round"/>
+        <g clip-path="url(#miniIn)"><rect id="nextW" x="500" y="250" width="100" height="70" fill="var(--water)"/></g>
+        <text x="550" y="274" text-anchor="middle" font-size="12" font-weight="700" fill="var(--muted)">next bucket</text>
+        <g transform="translate(468,160)"><g id="bell"><path d="M-12 8 Q-12 -10 0 -12 Q12 -10 12 8 L16 12 H-16 Z" fill="var(--saffron)" stroke="var(--stroke)" stroke-width="2.5" stroke-linejoin="round"/><circle cx="0" cy="16" r="3.5" fill="var(--stroke)"/></g></g>
+      </g>
+
+      <!-- bucket -->
+      <g id="bucketG">
+        <path d="M270 140 L420 140 L400 330 L290 330 Z" fill="var(--bucket)"/>
+        <g id="waterWrap" clip-path="url(#inside)">
+          <g id="waterG" transform="translate(0,330)">
+            <g class="wave"><path d="M-100 0 q25 -9 50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 V260 H-100 Z" fill="url(#wg)"/></g>
+            <g class="wave" style="animation-duration:3.4s;animation-direction:reverse"><path d="M-100 5 q25 -7 50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 V260 H-100 Z" fill="var(--water2)" opacity=".35"/></g>
+          </g>
+          <line x1="284" y1="150" x2="296" y2="300" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".35"/>
+        </g>
+        <path d="M270 140 L420 140 L400 330 L290 330 Z" fill="none" stroke="var(--stroke)" stroke-width="5" stroke-linejoin="round"/>
+        <line x1="274" y1="190" x2="416" y2="190" stroke="var(--stroke)" stroke-width="3" opacity=".35"/>
+        <line x1="281" y1="268" x2="409" y2="268" stroke="var(--stroke)" stroke-width="3" opacity=".35"/>
+        <rect x="263" y="133" width="164" height="13" rx="6.5" fill="var(--bucket)" stroke="var(--stroke)" stroke-width="4"/>
+        <path d="M274 134 Q345 66 416 134" fill="none" stroke="var(--stroke)" stroke-width="4" stroke-linecap="round"/>
+        <!-- hole -->
+        <g id="leakG">
+          <ellipse id="hole" cx="401" cy="322" rx="5" ry="5" fill="var(--stroke)"/>
+          <path id="stream" d="M404 322 Q430 326 436 368" fill="none" stroke="var(--water)" stroke-width="0" stroke-linecap="round" opacity="0"/>
+          <ellipse cx="436" cy="372" rx="14" ry="3" fill="var(--water)" opacity=".5"/>
+        </g>
+      </g>
+
+      <!-- splash line + ruler (outside bucket, not tilted) -->
+      <g id="mark" style="display:none">
+        <line x1="258" x2="432" y1="0" y2="0" stroke="var(--coral)" stroke-width="3.5" stroke-dasharray="9 6"/>
+        <text x="252" y="-4" text-anchor="end" font-size="14" font-weight="800" fill="var(--coral)" id="markT1">splash line</text>
+        <text x="252" y="12" text-anchor="end" font-size="13" font-weight="700" fill="var(--coral)" id="markT2">-50 mV</text>
+      </g>
+      <g id="restTxt" style="display:none">
+        <text x="260" y="333" text-anchor="end" font-size="13" font-weight="700" fill="var(--muted)">empty</text>
+        <text x="260" y="348" text-anchor="end" font-size="13" font-weight="700" fill="var(--muted)">-70 mV</text>
+      </g>
+
+      <!-- neighbour's cup -->
+      <line id="pourStream" x1="327" y1="72" x2="327" y2="200" stroke="var(--water)" stroke-width="5" stroke-linecap="round"/>
+      <g transform="translate(345,50)"><g id="cup">
+        <rect id="sleeve" x="-15" y="-130" width="30" height="132" rx="15" fill="#E2503A"/>
+        <path d="M-20 0 L20 0 L15 36 Q0 40 -15 36 Z" fill="#DDE3EA" stroke="var(--stroke)" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M20 8 q14 4 0 20" fill="none" stroke="var(--stroke)" stroke-width="3"/>
+        <circle cx="0" cy="3" r="2" fill="var(--water)"/>
+      </g></g>
+      <!-- ladle -->
+      <g transform="translate(345,100)"><g id="ladle">
+        <rect x="-3" y="-140" width="6" height="130" rx="3" fill="#8A93A0" stroke="var(--stroke)" stroke-width="2"/>
+        <path d="M-18 -12 Q0 30 18 -12 Z" fill="#B7BFCA" stroke="var(--stroke)" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M-14 -11 Q0 6 14 -11 Z" fill="var(--water)"/>
+      </g></g>
+
+      <!-- Rayyan -->
+      <g id="rayyan" transform="translate(12,146)">
+        <ellipse cx="70" cy="232" rx="50" ry="8" fill="#000" opacity=".14"/>
+        <rect x="52" y="190" width="14" height="38" rx="6" fill="#12264A"/><rect x="76" y="190" width="14" height="38" rx="6" fill="#12264A"/>
+        <ellipse cx="55" cy="230" rx="13" ry="6" fill="#7B4A2A"/><ellipse cx="87" cy="230" rx="13" ry="6" fill="#7B4A2A"/>
+        <path d="M42 124 Q30 152 36 176" stroke="#0F8A82" stroke-width="15" fill="none" stroke-linecap="round"/>
+        <circle cx="36" cy="180" r="8" fill="#E8B48B"/>
+        <path d="M40 112 Q70 100 100 112 L116 204 Q70 218 24 204 Z" fill="#0F8A82"/>
+        <path d="M31 162 Q70 172 109 162 L111 174 Q70 184 29 174 Z" fill="#F5B52E"/>
+        <path d="M70 120 q-9 13 0 19 q9 -6 0 -19z" fill="#fff" opacity=".92"/>
+        <g id="armR"><path d="M98 124 Q128 130 142 154" stroke="#0F8A82" stroke-width="15" fill="none" stroke-linecap="round"/><circle cx="143" cy="158" r="8.5" fill="#E8B48B"/></g>
+        <circle cx="70" cy="72" r="38" fill="#E8B48B"/>
+        <circle cx="32" cy="76" r="7" fill="#DDA377"/><circle cx="108" cy="76" r="7" fill="#DDA377"/>
+        <path d="M33 62 Q35 28 70 27 Q105 28 107 62 Q70 49 33 62 Z" fill="#fff" stroke="#12264A" stroke-width="2.5" stroke-linejoin="round"/>
+        <path d="M36 50 Q70 36 104 50" stroke="#1C6FCB" stroke-width="5" fill="none"/>
+        <path d="M70 33 q-5 8 0 11 q5 -3 0 -11z" fill="#2B9CF2"/>
+        <circle cx="46" cy="92" r="7" fill="#F28B7D" opacity=".5"/><circle cx="94" cy="92" r="7" fill="#F28B7D" opacity=".5"/>
+        <g id="eyes">
+          <circle cx="55" cy="79" r="9.5" fill="#fff"/><circle cx="85" cy="79" r="9.5" fill="#fff"/>
+          <circle id="pL" cx="58" cy="80" r="5" fill="#12264A"/><circle id="pR" cx="88" cy="80" r="5" fill="#12264A"/>
+          <circle cx="60" cy="78" r="1.7" fill="#fff"/><circle cx="90" cy="78" r="1.7" fill="#fff"/>
+        </g>
+        <path id="bL" d="M45 66 Q55 61 64 65" stroke="#12264A" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <path id="bR" d="M76 65 Q85 61 95 66" stroke="#12264A" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <path id="mouth" d="M56 98 Q70 112 84 98" stroke="#12264A" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+
+      <!-- rain overlay of kids' thoughts is intentionally absent -->
+    </svg>
+    <div class="stagebar"><button class="btn small" id="tgraph" aria-expanded="false">Show the graph</button></div>
+    <figure class="tracebox" id="tracebox" style="display:none">
+      <figcaption id="tcap">What scientists record: the water level over time (Voltage)</figcaption>
+      <canvas id="trace" role="img" aria-label="Graph of the water level (membrane voltage) over time"></canvas>
+    </figure>
+  </section>
+
+  <section class="side" id="panel">
+    <h1 id="ctitle"></h1>
+    <div class="bubble" aria-live="polite"><span class="tag">Rayyan <span class="ar" lang="ar" dir="rtl">ريّان</span></span><p id="say"></p></div>
+    <div id="body"></div>
+        <div class="pager"><button class="btn" id="back">Back</button><button class="btn dark" id="next">Next</button></div>
+  </section>
+</main>
+
+<script>
+/* ============================================================
+   Rayyan and the Leaky Bucket: LIF neuron teaching app
+   Model: tau * dV/dt = -(V - Vrest) + R*I ; spike at Vth, reset
+   ============================================================ */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const CM=2, Rm=tau=>tau/CM;   /* tau = R*C, with C fixed at 2 nF (so tau = 20 ms means R = 10 MOhm) */
+const VREST=-70, VRESET=-70, VTOP=-45, CUP=5, DT=.25, REFR=2;
+const YB=330, HH=190;      /* bucket bottom y and inner height in the SVG */
+
+const S={ch:0,V:VREST,t:0,acc:0,refr:0,hist:[],sp:[],spikes:0,fDisp:0,fast:0,win:200,speed:10,
+  p:{tau:20,I:0,Vth:-50},chat:false,n:{},above:false,nextLevel:0,
+  forceRain:0,pours:0,lastSay:0,moodT:null,hlT:null};
+
+function predRate(I,tau,Vth){const RI=Rm(tau)*I,d=Vth-VREST;if(RI<=d)return 0;const T=-tau*Math.log(1-d/RI);return 1000/(T+REFR);}
+
+/* ---------------- Rayyan's face ---------------- */
+const MOODS={
+  happy:{bl:'M45 66 Q55 61 64 65',br:'M76 65 Q85 61 95 66',m:'M56 98 Q70 112 84 98',fill:'none'},
+  cheer:{bl:'M45 63 Q55 56 64 62',br:'M76 62 Q85 56 95 63',m:'M54 96 Q70 122 86 96 Z',fill:'#8E1F2E'},
+  wow:{bl:'M45 60 Q55 53 64 58',br:'M76 58 Q85 53 95 60',m:'M63 100 Q70 90 77 100 Q70 114 63 100 Z',fill:'#8E1F2E'},
+  worried:{bl:'M45 69 Q55 66 64 59',br:'M76 59 Q85 66 95 69',m:'M57 104 Q70 94 83 104',fill:'none'},
+  think:{bl:'M45 66 Q55 62 64 66',br:'M76 58 Q85 54 95 60',m:'M59 100 Q71 101 82 96',fill:'none'}
+};
+function setMood(m,ms=2800){
+  const d=MOODS[m]||MOODS.happy;
+  $('#bL').setAttribute('d',d.bl);$('#bR').setAttribute('d',d.br);
+  const mo=$('#mouth');mo.setAttribute('d',d.m);mo.setAttribute('fill',d.fill);
+  clearTimeout(S.moodT);
+  if(m!=='happy')S.moodT=setTimeout(()=>setMood('happy'),ms);
+}
+function say(html,mood='happy',force=true){
+  const now=performance.now();
+  if(!force&&now-S.lastSay<900)return;
+  S.lastSay=now;
+  const p=$('#say');p.innerHTML=html;p.classList.remove('pop');void p.offsetWidth;p.classList.add('pop');
+  setMood(mood);
+}
+function restart(el,cls){el.classList.remove(cls);void el.getBoundingClientRect();el.classList.add(cls);}
+
+/* ---------------- chapters ---------------- */
+const slider=(k,label,min,max,step,lo,hi)=>`<label class="sl"><span class="sl-top">${label}<output data-out="${k}"></output></span><input type="range" data-p="${k}" min="${min}" max="${max}" step="${step}"><span class="ends"><i>${lo}</i><i>${hi}</i></span></label>`;
+const FMT={tau:v=>`tau = ${(+v).toFixed(0)} ms`,I:v=>`${(+v).toFixed(1)} nA`,Vth:v=>`${(+v).toFixed(0)} mV`};
+
+const resetBtn=`<button class="btn small" data-act="reset">Empty the bucket</button>`;
+const more=(t,inner)=>`<details class="more"><summary>${t}</summary><div class="morebody">${inner}</div></details>`;
+const real=(inner)=>`<details class="real"><summary>What is this in a real neuron?</summary>${inner}</details>`;
+const holeSl=slider('tau','Hole size',8,80,1,'Big hole','Tiny hole');
+const fiCanvas=`<canvas id="fi" role="img" aria-label="Curve of splashes per second against rain strength"></canvas>`;
+
+const CH=[
+{ key:'meet', title:'Meet Rayyan', speed:10, leak:false, spike:false, mark:false, rest:false, sim:false, trace:false, rain:false, floor:true, wave:true, needsAct:false,
+  say:`<span class="ar" lang="ar">أهلاً وسهلاً!</span> Welcome! I'm Rayyan. My name means “well-watered”, which suits me, because I carry water for a living. This bucket is secretly a model of a brain cell, and I'll show you how it works in a few small steps.`,
+  body:()=>`<div class="trio">
+    <div><h3>Collect</h3><p>Neighbors pour water in, and the level rises.</p></div>
+    <div><h3>Leak</h3><p>A little hole drains the bucket all the time.</p></div>
+    <div><h3>Splash</h3><p>At the line, the bucket tips and sends a message.</p></div></div>`+
+    real(`<p>Your brain has roughly 86 billion neurons. Each one listens to its neighbors and decides: pass a message on, or stay quiet. The <b>leaky integrate-and-fire</b> (LIF) model is the simplest recipe for that decision, and it is exactly the three rules above: integrate, leak, fire.</p>`) },
+
+{ key:'pour', title:'Pour and collect', speed:10, leak:false, spike:false, mark:false, rest:true, sim:true, trace:true, rain:false, floor:true, needsAct:true,
+  say:`Each neighbor brings one cup of water. Press <b>Pour a cup</b> and watch the level climb. Collecting lots of small cups into one bucket is called <b>integrating</b>.`,
+  body:()=>`<p class="try">Try it: pour a few cups, then scoop some out.</p>
+    <div class="controls"><div class="row"><button class="btn pour" data-act="pour">Pour a cup</button><button class="btn" data-act="scoop">Scoop some out</button>${resetBtn}</div></div>`+
+    real(`<p>Neighbor neurons talk through <b>synapses</b>. Each incoming signal nudges the cell's voltage a little. A nudge up is <b>excitatory</b> (a cup poured in). A nudge down is <b>inhibitory</b> (a scoop taken out).</p><p>The water level is the neuron's <b>membrane voltage</b>, written <b>V</b>, measured in <b>millivolts (mV)</b>. An untouched neuron sits at about -70 mV: our empty bucket.</p>`) },
+
+{ key:'hole', title:'The hole', speed:10, leak:true, spike:false, mark:true, rest:true, sim:true, trace:true, rain:false, floor:true, needsAct:true,
+  say:`Uh-oh, my bucket has a hole! The fuller it gets, the faster it leaks. Can you reach the dashed line by pouring slowly? Then try pouring fast.`,
+  body:()=>`<p class="try">Try it: one cup per second, then three cups in a second.</p>
+    <div class="controls"><div class="row"><button class="btn pour" data-act="pour">Pour a cup</button>${resetBtn}</div>${holeSl}</div>`+
+    real(`<p>A cell's membrane is leaky: charged particles slip through tiny channels, so the voltage always drifts back toward rest. Inputs that arrive close together add up. Inputs spread far apart fade before they can.</p><p>How fast it leaks is the <b>membrane time constant</b>, <b>τ</b> (tau), in milliseconds. A tiny hole means large τ and a long memory. A big hole means small τ and a quick-forgetting cell.</p>`) },
+
+{ key:'splash', title:'The splash line', speed:12, leak:true, spike:true, mark:true, rest:false, sim:true, trace:true, rain:false, floor:true, axon:true, needsAct:true,
+  say:`Now the exciting part. When the water reaches the line, <span class="ar" lang="ar">يلا!</span> <b>Yalla!</b> The bucket tips, empties, and sends a message to the next bucket. Then it starts again from empty.`,
+  body:()=>`<p class="try">Try it: make it splash a few times, then change the hole size.</p>
+    <div class="controls"><div class="row"><button class="btn pour" data-act="pour">Pour a cup</button>${resetBtn}</div>${holeSl}</div>`+
+    real(`<p>When the voltage reaches the <b>threshold</b> (about -50 mV), the neuron fires a <b>spike</b>, or <b>action potential</b>: a brief all-or-nothing pulse that travels down its axon to the next neurons. A spike is always the same size. What carries information is <i>when</i> it happens.</p><p>The LIF model doesn't draw the spike's shape. It notes “spike!”, <b>resets</b> the voltage to a low value, and pauses briefly (the <b>refractory period</b>).</p>`) },
+
+{ key:'rain', title:'Steady rain', speed:40, leak:true, spike:true, mark:true, rest:false, sim:true, trace:true, rain:true, floor:true, axon:true, needsAct:true, defaults:{I:1.2},
+  say:`What if it rains instead of cups? Steady rain is a constant stream of water into my bucket. A drizzle? The hole wins. Heavy rain? Splash after splash! Notice something important: harder rain doesn't make my splashes <b>bigger</b>, it makes them <b>more frequent</b>.`,
+  body:()=>`<p class="try">Try it: find the weakest rain that still makes the bucket splash.</p>
+    <div class="controls">${slider('I','Rain strength',0,4,.1,'None','Downpour')}<p class="read" id="rainRead"></p><div class="row">${resetBtn}</div></div>`+
+    real(`<p>The <b>rain represents the neuron's input current</b>, <b>I</b>: the steady drive flowing into the cell, such as the combined signals arriving from thousands of neighbors through synapses. (In experiments, scientists often inject it through a tiny electrode.) Stronger rain means a stronger drive.</p><p>If it's too weak, the leak cancels it and the voltage settles below threshold: no spikes at all. The minimum current that works is the <b>rheobase</b>.</p><p>Above that, stronger current means more spikes per second. That is how a neuron says “strong input”: not with bigger spikes, but a higher <b>firing rate</b>.</p>`) },
+
+{ key:'fi', title:'Rain and splash rate', speed:40, leak:true, spike:true, mark:true, rest:false, sim:true, trace:true, rain:true, floor:true, axon:true, needsAct:true, defaults:{I:1.6},
+  say:`Let's plot it! This curve shows how many splashes per second my bucket makes for each rain strength. The coral dot is where you are right now.`,
+  body:()=>`<p class="try">Try it: slide the rain up and watch the dot ride the curve. Then raise the splash line.</p>
+    <div class="controls">${slider('I','Rain strength',0,4,.1,'None','Downpour')}${slider('Vth','Splash line height',-60,-47,1,'Low','High')}<p class="read" id="rainRead"></p>${fiCanvas}<div class="row">${resetBtn}</div></div>`+
+    real(`<p>This is the <b>f–I curve</b>: firing rate (f) against input current (I). It stays flat at zero until the current passes the rheobase, then climbs. A higher threshold means a stronger current is needed before the neuron fires at all. Reading a neuron's activity as a firing rate is one of the most common ideas in neuroscience.</p>`) },
+
+{ key:'eq1', title:'Water in, water out', speed:25, leak:true, spike:false, mark:true, rest:false, sim:true, trace:true, rain:true, floor:true, needsAct:true, defaults:{I:.8},
+  say:`Here is the secret behind everything you've done so far. At every moment, two things happen to my bucket: rain pours water <b>in</b>, and the hole lets water <b>out</b>. The level changes by the difference. Move the rain and watch the numbers.`,
+  body:()=>`<p class="try">Try it: move the rain until the level stops changing.</p>
+    <div class="controls">
+      <div class="meter meter-equation" aria-label="Level change equals rain pushing in minus leak pushing out">
+        <div class="m net"><small>The level is</small><b id="mNet">steady</b></div><span class="op">=</span>
+        <div class="m in"><small>Rain pushing in</small><b id="mRain">0 mV</b></div><span class="op">−</span>
+        <div class="m out"><small>Leak pushing out</small><b id="mLeak">0 mV</b></div>
+      </div>
+      ${slider('I','Rain strength',0,2.4,.1,'None','Heavy')}
+      <div class="row">${resetBtn}</div></div>
+    <p class="bridge">Next, Rayyan turns these three cards into one short line of maths.</p>`+
+    real(`<p>Both pushes are measured in the same unit, millivolts. The leak gets stronger the higher the water climbs above rest, so it always ends up catching the rain. The level settles where the two are equal, at V = V<sub>rest</sub> + R · I. If that settling point is above the splash line, the bucket will splash.</p>`) },
+
+{ key:'eq2', title:'Building the equation', speed:40, leak:true, spike:false, mark:true, rest:false, sim:true, trace:true, rain:true, floor:true, axon:false, needsAct:true, defaults:{I:.8},
+  say:'',
+  body:()=>`<div class="controls">
+    <div class="builder" aria-label="Equation builder">
+      <span class="bh bh1">What happens</span><span class="bh bh2">What makes it happen</span>
+      <div class="bcol net"><div class="bword">The level changes</div><div class="bsym empty" id="sNet">?</div><div class="bnum" id="nNet"></div></div>
+      <div class="bop">=</div>
+      <div class="bcol in"><div class="bword">Rain in</div><div class="bsym empty" id="sIn">?</div><div class="bnum" id="nIn"></div></div>
+      <div class="bop">−</div>
+      <div class="bcol out"><div class="bword">Leak out</div><div class="bsym empty" id="sOut">?</div><div class="bnum" id="nOut"></div></div>
+    </div>
+    <div class="final" id="eqFinal" hidden>
+      <div class="feq"><span class="c-net">τ · dV/dt</span> = <span class="c-out">−(V − V<sub>rest</sub>)</span> + <span class="c-in">R · I</span></div>
+      <p>Same idea, tidied up: the leak's minus sign is now built into its term. <b>Left</b>: what happens to the level. <b>Right</b>: the two things that make it happen.</p>
+      <p class="check" id="eqCheck"></p>
+    </div>
+    <div class="final" id="eqRule" hidden><div class="feq">if V ≥ V<sub>th</sub>: spike, then V = V<sub>reset</sub></div></div>
+    ${slider('I','Rain strength',0,2.4,.1,'None','Heavy')}
+    <div class="row stepper"><button class="btn small" data-act="eqprev" id="eqPrev">Back</button><span id="eqPos"></span><button class="btn teal" data-act="eqnext" id="eqNext"></button></div>
+  </div>`+
+    real(`<p>The name decodes itself. <b>Leaky</b> is the −(V − V<sub>rest</sub>) term. <b>Integrate</b> is the way dV/dt adds up the incoming rain over time. <b>Fire</b> is the splash rule.</p>`) },
+
+{ key:'noise', title:'Noisy neighbors', speed:40, leak:true, spike:true, mark:true, rest:false, sim:true, trace:true, rain:true, floor:false, axon:true, chat:true, chatOn:true, needsAct:true, defaults:{I:.5},
+  say:`In real life my neighbors don't pour steadily. Cups and scoops arrive at random. Watch the graph: the water jitters, and splashes come at uneven moments, even with very little rain.`,
+  body:()=>`<p class="try">Try it: switch the chatter off and on, and change the rain.</p>
+    <div class="controls"><label class="chk"><input type="checkbox" data-chk="chat" checked> Neighbors chatter (random cups and scoops)</label>${slider('I','Rain strength',0,3,.1,'None','Heavy')}<div class="row">${resetBtn}</div></div>`+
+    real(`<p>A real neuron receives thousands of inputs, some excitatory and some inhibitory, arriving at irregular times. Here, <b>excitatory cups arrive about five times as often as inhibitory scoops</b>, so the chatter adds a <b>net excitatory drive</b> as well as fluctuations. The voltage can still dip below rest briefly when inhibition wins at a particular moment.</p>`) },
+
+{ key:'play', title:'Your turn to play', speed:40, leak:true, spike:true, mark:true, rest:false, sim:true, trace:true, tall:true, rain:true, floor:false, axon:true, chat:true, needsAct:true, defaults:{I:2.4},
+  say:`Everything you've learned is now a slider. <b>Noisy input</b> is always on, modeling random cups and scoops from neighbors. Challenge: can you make the bucket splash about 40 times a second?`,
+  body:()=>`<div class="controls">
+    ${slider('I','Rain strength',0,4,.1,'None','Downpour')}
+    ${slider('tau','Hole size',8,80,1,'Big hole','Tiny hole')}
+    ${slider('Vth','Splash line height',-60,-47,1,'Low','High')}
+    <p class="read" id="rainRead"></p><div class="row">${resetBtn}</div></div>`+
+    real(`<p>Real cells are messier: spikes have a shape, the threshold shifts, and many ion channels play a part. Fuller models (Hodgkin–Huxley, for one) capture that. LIF keeps just enough to be fast and clear, which is why it is used to simulate big networks of neurons.</p>`) },
+
+{ key:'quiz', title:'Show what you know', speed:25, leak:true, spike:true, mark:true, rest:false, sim:true, trace:false, rain:true, floor:true, axon:true, wave:true, needsAct:true, defaults:{I:3},
+  say:`Look, my bucket is splashing happily. Five quick questions, then I'll show you the full map from bucket to brain cell.`,
+  body:()=>`<div class="controls quiz" id="quiz"></div><div id="recap"></div>` }
+];
+
+const CFG=()=>CH[S.ch];
+
+/* ---------------- quiz ---------------- */
+const QUIZ=[
+ {q:'What does the water level in Rayyan’s bucket stand for?',o:['The neuron’s membrane voltage','The number of neighbors','How fast a person thinks','The size of the brain'],a:0,w:'The level is the voltage V across the cell membrane. Inputs push it up or down.'},
+ {q:'Why does a slow trickle of cups never make the bucket splash?',o:['The line is too high','The hole drains water as fast as it arrives','Cups are too small to count','Rayyan forgets to pour'],a:1,w:'This is the “leaky” part. Inputs must arrive close together, or the leak wins.'},
+ {q:'What happens right after a spike in the LIF model?',o:['The voltage keeps climbing','The threshold doubles','The voltage is reset to a low value','The neuron is deleted'],a:2,w:'The model records the spike and resets V, after a short refractory pause.'},
+ {q:'How does a neuron in this model say “strong input”?',o:['By firing bigger spikes','By firing more often','By changing its resting voltage','By never firing'],a:1,w:'Spikes are all-or-nothing, so strength shows up as firing rate (the f–I curve).'},
+ {q:'A neuron has a tiny hole, meaning a large τ. What follows?',o:['It forgets inputs instantly','It can never fire','It holds on to inputs longer, so spread-out inputs can still add up','It fires at -70 mV'],a:2,w:'Large τ means a slow leak and a long memory.'}
+];
+let qi=0,score=0,answered=false;
+function renderQuiz(){
+  const el=$('#quiz');if(!el)return;
+  if(qi>=QUIZ.length){
+    acted();
+    el.innerHTML=`<h3>You scored ${score} out of ${QUIZ.length}</h3><p>${score>=4?'Mashallah, you really understand the bucket!':score>=2?'Good start. Revisit a chapter and try the sliders again.':'No worries. Head back to “The hole” and play with it.'}</p><div class="row"><button class="btn" data-act="again">Try the quiz again</button></div>`;
+    say(score>=4?`<span class="ar" lang="ar">برافو!</span> You can explain a spiking neuron with a bucket. Here's the map from my world to the brain's.`:`Every neuroscientist started by being confused. Here's the map to keep handy, and the sliders are always waiting.`,score>=4?'cheer':'happy');
+    $('#recap').innerHTML=recap();return;
+  }
+  const Q=QUIZ[qi];answered=false;
+  el.innerHTML=`<h3>Question ${qi+1} of ${QUIZ.length}</h3><p style="margin:0 0 6px;font-weight:700">${Q.q}</p>`+Q.o.map((t,i)=>`<button class="opt" data-opt="${i}">${t}</button>`).join('')+`<p class="why" id="why"></p><div class="row" id="qnext"></div>`;
+}
+function recap(){
+  const rows=[
+   ['Water level','Membrane voltage, V'],['Empty bucket','Resting potential (about -70 mV)'],
+   ['A neighbor’s cup','Excitatory input (a synapse pushes V up)'],['Scooping water out','Inhibitory input (pushes V down)'],
+   ['The hole','The leak'],['Hole size','Time constant, τ (tiny hole = large τ)'],
+   ['Steady rain','Input current, I'],['The splash line','Threshold, V<sub>th</sub> (about -50 mV)'],
+   ['Bucket tips and empties','Spike, then reset of V'],['Message to the next bucket','The action potential travelling along the axon'],
+   ['Splashes per second','Firing rate']];
+  return `<div class="real"><h2>The map: bucket to brain cell</h2><div class="tablewrap"><table><thead><tr><th>In Rayyan's world</th><th>In the model</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+
+/* ---------------- equation chips ---------------- */
+const EQ={
+ tau:{hl:'leakG',t:'<b>τ (tau)</b> is the speed knob, set by the hole (you changed it in “The hole”). A tiny hole means a large τ: everything happens slowly and water lingers. A big hole means a small τ: the bucket reacts fast and forgets fast.'},
+ dv:{hl:'waterWrap',t:'<b>dV/dt</b> is the “level is rising, falling or steady” you watched in “Water in, water out”. Read it as: how fast the water level is changing right now.'},
+ leak:{hl:'leakG',t:'<b>−(V − V<sub>rest</sub>)</b> is the leak, the stream you saw in “The hole”. At rest it is zero. The higher the water sits above rest, the harder it pushes out.'},
+ rain:{hl:'rain',t:'<b>R · I</b> is the rain you moved in “Steady rain”: the input current I times the membrane resistance R. A bigger hole means a lower R, so the same rain pushes the level up less. (With the default hole, R = 10 MΩ: each nanoamp pushes about 10 mV.)'},
+ rule:{hl:'mark',t:'<b>The splash rule</b> is “The splash line”. If V reaches the threshold V<sub>th</sub>, the neuron fires a spike and V is reset to V<sub>reset</sub>. The equation alone never spikes; this rule is added by hand.'}
+};
+function showEq(k){
+  $$('[data-eq]').forEach(b=>b.classList.toggle('on',b.dataset.eq===k));
+  $('#eqx').innerHTML=EQ[k].t;
+  const el=document.getElementById(EQ[k].hl);
+  if(k==='rain')S.forceRain=performance.now()+3200;
+  if(el){el.classList.remove('hl');void el.getBoundingClientRect();el.classList.add('hl');clearTimeout(S.hlT);S.hlT=setTimeout(()=>el.classList.remove('hl'),3200);}
+  setMood(k==='rule'?'wow':'think');
+}
+
+/* ---------------- simulation ---------------- */
+/* LIF: tau dV/dt = -(V-Vrest) + R I. With fixed C=2 nF,
+   R=tau/C, so changes to the hole size affect tau and R together.
+   Units: mV, ms, nA, MOhm. Constant-current drift is solved exactly.
+   Spike onset is interpolated to the threshold-crossing time and followed
+   by an immediate Vreset and a 2 ms absolute refractory voltage clamp. */
+function resetSim(){S.V=VREST;S.t=0;S.acc=0;S.refr=0;S.hist=[[0,VREST]];S.sp=[];S.spikes=0;S.above=false;S.nextLevel=0;S.fast=0;}
+function fire(){
+  const p=S.p;
+  S.hist.push([S.t,p.Vth],[S.t,VRESET]);
+  S.V=VRESET;S.refr=REFR;S.spikes++;S.sp.push(S.t);S.fast=.7;onSpike();
+}
+function voltageJump(delta){
+  const c=CFG();
+  if(S.refr>0)return false; // During absolute refractory time, incoming pulses cannot change V.
+  S.hist.push([S.t,S.V]);
+  S.V+=delta;
+  if(c.floor)S.V=Math.max(S.V,VREST);
+  if(c.spike&&S.V>=S.p.Vth)fire();
+  else{if(!c.spike)S.V=Math.min(S.V,VTOP);S.hist.push([S.t,S.V]);}
+  return true;
+}
+function stepSim(d){
+  const c=CFG(),p=S.p;
+  let remain=d;
+  while(remain>1e-9){
+    if(S.refr>1e-9){
+      const held=Math.min(remain,S.refr);
+      S.V=VRESET;S.refr=Math.max(0,S.refr-held);
+      S.t+=held;remain-=held;
+      continue;
+    }
+    if(c.spike&&S.V>=p.Vth){fire();continue;}
+    const startV=S.V,vinf=VREST+Rm(p.tau)*p.I;
+    const endV=c.leak ? vinf+(startV-vinf)*Math.exp(-remain/p.tau)
+                      : startV+(p.I/CM)*remain;
+    if(c.spike&&startV<p.Vth&&endV>=p.Vth){
+      const crossing=c.leak
+        ? -p.tau*Math.log((p.Vth-vinf)/(startV-vinf))
+        : (p.Vth-startV)*CM/p.I;
+      const elapsed=clamp(crossing,1e-9,remain);
+      S.t+=elapsed;remain-=elapsed;S.V=p.Vth;
+      fire();
+      continue;
+    }
+    S.V=endV;S.t+=remain;remain=0;
+  }
+  if(c.chat&&S.chat&&S.refr<=0){
+    // Both "Noisy neighbors" and "Your turn to play" use the same biased
+    // random synaptic input: +3 mV events at 250/s, -3 mV events at 50/s.
+    // Positive events are five times more likely; the mean added drive is
+    // therefore excitatory, not zero-mean noise. Events during the 2 ms
+    // absolute refractory hold cannot change the clamped voltage.
+    if(Math.random()<.25*d)voltageJump(+3);
+    if(Math.random()<.05*d)voltageJump(-3);
+  }
+  if(!c.spike)S.V=Math.min(S.V,VTOP);
+  if(c.floor)S.V=Math.max(S.V,VREST);
+  S.acc+=d;
+  if(S.acc>=1){S.acc-=1;S.hist.push([S.t,S.V]);}
+  while(S.hist.length&&S.hist[0][0]<S.t-S.win-20)S.hist.shift();
+  while(S.sp.length&&S.sp[0]<S.t-S.win-20)S.sp.shift();
+}
+
+/* ---------------- actions ---------------- */
+const SLEEVES=['#E2503A','#7B4FA3','#0F8A82','#E08A1E','#C2487E'];
+function waterTopY(){return YB-clamp((S.V-VREST)/(VTOP-VREST),0,1)*HH;}
+function pour(){
+  const c=CFG();if(!c.sim)return;acted();
+  $('#sleeve').setAttribute('fill',SLEEVES[S.pours++%SLEEVES.length]);
+  $('#pourStream').setAttribute('y2',Math.max(waterTopY(),150));
+  restart($('#cup'),'pour');restart($('#pourStream'),'run');
+  voltageJump(CUP);
+  S.n.pour=(S.n.pour||0)+1;
+  if(S.ch===1){
+    const n=S.n.pour;
+    if(S.V>=VTOP-.01)say(`Brimming! There's no room for more. Notice the water never goes down by itself. Hold that thought: it's about to.`,'wow');
+    else if(n===1)say(`See the level go up? Every cup adds the same amount: ${CUP} mV.`,'happy',false);
+    else if(n===4)say(`Cup after cup, it all adds up. That's <b>integrating</b>!`,'cheer',false);
+    else say(['Glug, glug!','Higher and higher!','Another neighbor, another cup.','Nice pour!'][n%4],'happy',false);
+  }
+}
+function scoop(){
+  acted();
+  if(S.V<=VREST+.01){say(`Nothing to scoop, it's already empty!`,'worried');return;}
+  restart($('#ladle'),'scoop');voltageJump(-CUP);
+  say(`Scooped some out. <b>Inhibitory</b> neighbors do this: they make a splash less likely.`,'think');
+}
+function onLine(){
+  if(CFG().key!=='hole')return;
+  S.n.line=(S.n.line||0)+1;
+  say(S.n.line===1?`You reached the line! Did you notice how quickly you had to pour? Next chapter: what the line actually does.`:`At the line again!`,'cheer',false);
+}
+const SPLASH=['Splash again!','Another message sent!','The bucket tips, and off the message goes.','Keep pouring, I like this!'];
+function onSpike(){
+  restart($('#bucketG'),'tip');restart($('#bell'),'ring');restart($('#msg'),'go');
+  S.nextLevel=Math.min(1,S.nextLevel+.14);restart($('#nextW'),'flash');
+  const k=CFG().key;
+  if(k==='splash'){
+    if(S.spikes===1)say(`<span class="ar" lang="ar">يلا!</span> <b>Yalla!</b> The line was reached: splash! The bucket tipped, emptied, and a message ran to my neighbor.`,'cheer');
+    else say(SPLASH[S.spikes%4],'cheer',false);
+  }
+}
+let rainSayT=null;
+function onParam(k){
+  if(CFG().key==='eq1'&&k==='I'){clearTimeout(rainSayT);rainSayT=setTimeout(()=>{
+    say(S.p.I===0?`No rain: nothing comes in, so the leak slowly drains the bucket to empty.`:`The level climbs until the leak catches up with the rain. Then the two cancel and the level stops: that's the balance point.`,S.p.I===0?'think':'cheer');},500);}
+  if(CFG().key==='hole'||CFG().key==='splash'){
+    if(k==='tau'){clearTimeout(rainSayT);rainSayT=setTimeout(()=>{
+      const t=S.p.tau;say(t<16?`Huge hole! The water vanishes almost as fast as it arrives.`:t>55?`A tiny hole. Water stays for ages, so even slow pouring adds up.`:`A medium hole. Fast pouring wins, slow pouring doesn't.`,t<16?'worried':'think');},400);}
+  }
+  if(['rain','fi','play'].includes(CFG().key)){
+    updateRead();
+    if(k==='I'&&CFG().key==='rain'){clearTimeout(rainSayT);rainSayT=setTimeout(()=>{
+      const need=(S.p.Vth-VREST)/Rm(S.p.tau),I=S.p.I;
+      say(I<=need?`Gentle rain. The hole drains it as fast as it falls, so the level just settles. No splash.`:I<need+.4?`Just above the minimum rain: splashes, but slowly.`:I>3?`A downpour! Splash after splash.`:`Stronger rain, faster splashing.`,I<=need?'worried':'cheer');},500);}
+  }
+}
+function updateMeter(){
+  const a=$('#mRain');if(!a)return;
+  const rain=Rm(S.p.tau)*S.p.I,leak=Math.max(0,S.V-VREST),net=rain-leak;
+  a.textContent=`${Math.round(rain)} mV`;$('#mLeak').textContent=`${Math.round(leak)} mV`;
+  const n=$('#mNet'),st=net>.6?'up':net<-.6?'down':'flat';
+  n.textContent=st==='up'?'rising ↑':st==='down'?'falling ↓':'steady';n.className=st;
+}
+
+/* ---------------- equation story builder ---------------- */
+const EQSTEPS=[
+ `Every evening I write one line in my notebook: <b>how did my level change today?</b> Rain brought water in, and the hole let water out. So the level changes by <b>rain in minus leak out</b>. Those are last chapter's three cards. Let's give each one a short symbol, one at a time.`,
+`First, <b>rain in</b>: The rain is a current, <b>I</b>: how much water pours in. <b>R</b> is a fixed number for my bucket (set by its hole), and it turns that rain into millivolts of push. So rain in is simply <b>R · I</b>.`,
+ `Next, <b>leak out</b>. The fuller the bucket, the harder it leaks, so the leak is how far the level sits above empty: <b>V − V<sub>rest</sub></b>. At empty it is zero: no water, no leak.`,
+ `Now the <b>level change</b>: how fast the level is moving. Scientists write that <b>dV/dt</b>, “change in V per unit of time”. Positive means rising, negative means falling.`,
+ `One more thing: my bucket doesn't react instantly. How slowly it reacts is set by the hole, and we call it <b>τ</b>, the speed knob. Now put it together. <b>Left</b>: what happens. <b>Right</b>: what makes it happen. Move the rain and watch: the two sides are <b>always equal</b>.`,
+ `The equation only describes the water level. The splash is a rule we add by hand: when V reaches V<sub>th</sub>, spike, then reset. Now my bucket is complete: <b>leaky</b>, <b>integrating</b>, and <b>firing</b>.`
+];
+const EQBTN=['Give rain a symbol','Give the leak a symbol','Give the level change a symbol','Add the speed knob τ','Add the splash rule'];
+const EQHL=[null,'rain','leakG','waterWrap','leakG','mark'];
+function flash(id){
+  const el=document.getElementById(id);if(!el)return;
+  el.classList.remove('hl');void el.getBoundingClientRect();el.classList.add('hl');
+  clearTimeout(S.hlT);S.hlT=setTimeout(()=>el.classList.remove('hl'),3200);
+}
+function renderEq(){
+  const k=S.eq;
+  const set=(id,html,on)=>{const e=$(id),v=on?html:'?';if(e.dataset.v!==v){e.dataset.v=v;e.innerHTML=v;restart(e,'pop');}e.classList.toggle('empty',!on);};
+  set('#sIn','R · I',k>=2);set('#sOut','V − V<sub>rest</sub>',k>=3);set('#sNet',k>=5?'τ · dV/dt':'dV/dt',k>=4);
+  $('#eqFinal').hidden=k<5;$('#eqRule').hidden=k<6;
+  $('#eqPos').textContent=`Piece ${k} of 6`;
+  $('#eqPrev').disabled=k===1;
+  const nb=$('#eqNext');nb.style.display=k===6?'none':'';nb.textContent=EQBTN[k-1]||'';
+}
+function eqGo(k){
+  const c=CFG();acted();
+  S.eq=clamp(k,1,6);
+  const sl=$('[data-p="I"]');
+  if(S.eq>=6&&!c.spike){c.spike=true;c.axon=true;$('#axonG').style.display='';S.p.I=2.4;if(sl){sl.max=4;sl.value=2.4;}refreshOuts();}
+  else if(S.eq<6&&c.spike){c.spike=false;c.axon=false;$('#axonG').style.display='none';S.p.I=.8;if(sl){sl.max=2.4;sl.value=.8;}refreshOuts();resetSim();}
+  if(S.eq===5)resetSim();   /* restart from empty so the numbers are moving when the two sides are revealed */
+  renderEq();
+  if(EQHL[S.eq-1]){if(S.eq===2)S.forceRain=performance.now()+3200;flash(EQHL[S.eq-1]);}
+  say(EQSTEPS[S.eq-1],S.eq===6?'cheer':'think');
+}
+function updateBuilder(){
+  if(!$('#nIn'))return;
+  const k=S.eq,tau=S.p.tau,rain=Rm(tau)*S.p.I,leak=Math.max(0,S.V-VREST),net=rain-leak,rate=net/tau;
+  $('#nIn').textContent=`${rain.toFixed(1)} mV`;$('#nOut').textContent=`${leak.toFixed(1)} mV`;
+  $('#nNet').textContent=k>=5?`${tau} ms × ${rate.toFixed(2)} = ${net.toFixed(1)} mV`:k>=4?`${rate>=0?'+':''}${rate.toFixed(2)} mV per ms`:(net>.6?'rising ↑':net<-.6?'falling ↓':'steady');
+  if(k>=5)$('#eqCheck').innerHTML=`Right now: left side = <b>${net.toFixed(1)} mV</b>. Right side = ${rain.toFixed(1)} − ${leak.toFixed(1)} = <b>${net.toFixed(1)} mV</b>. Equal, every moment.`;
+}
+function updateRead(){
+  const el=$('#rainRead');if(!el)return;
+  const {I,tau,Vth}=S.p,RI=Rm(tau)*I,d=Vth-VREST;
+  if(CFG().key==='play'&&S.chat){
+    /* noisy input: count the splashes the bucket actually makes over the last 300 ms of model time */
+    if(S.t<50)el.innerHTML=`Counting your splashes…`;
+    else{const w=Math.min(300,S.t),n=S.sp.filter(t=>t>S.t-w).length;el.innerHTML=`About <b>${Math.round(n/(w/1000))} splashes per second</b>.`;}
+  }else if(RI<=d)el.innerHTML=`This rain only pushes the level up to ${(VREST+RI).toFixed(0)} mV, below the line at ${Vth} mV. <b>No splashes.</b>`;
+  else el.innerHTML=`About <b>${predRate(I,tau,Vth).toFixed(0)} splashes per second</b>.`;
+}
+
+/* ---------------- panel + navigation ---------------- */
+function applyTrace(){
+  const c=CFG();
+  $('#tgraph').parentElement.hidden=!c.trace;
+  $('#tracebox').style.display=(c.trace&&S.showTrace)?'':'none';
+  $('#tracebox').classList.toggle('tall',!!c.tall);
+  $('#tgraph').textContent=S.showTrace?'Hide the graph':'Show the graph';
+  $('#tgraph').setAttribute('aria-expanded',S.showTrace);
+}
+function refreshNudge(){
+  const c=CFG(),pb=$('.btn.pour');
+  $('#next').classList.toggle('nudge',S.acted||!c.needsAct);
+  if(pb)pb.classList.toggle('nudge',!S.acted);
+}
+function acted(){if(!S.acted){S.acted=true;refreshNudge();}}
+function go(i){
+  S.ch=clamp(i,0,CH.length-1);const c=CFG();
+  resetSim();S.chat=(!!c.chatOn||c.key==='play');S.n={};S.forceRain=0;
+  Object.assign(S.p,{tau:20,I:0,Vth:-50},c.defaults||{});
+  if(c.key==='eq2'){c.spike=false;c.axon=false;c.say=EQSTEPS[0];S.eq=1;}
+  S.speed=c.speed;S.win=8*c.speed;
+  $('#ctitle').textContent=c.title;
+  $('#body').innerHTML=c.body();
+  $('#ptext').textContent=`Chapter ${S.ch+1} of ${CH.length}`;$('#pfill').style.width=((S.ch+1)/CH.length*100)+'%';
+  S.acted=false;S.showTrace=!!c.trace;
+  $('#back').disabled=S.ch===0;
+  $('#next').textContent=S.ch===0?'Begin the journey':S.ch===CH.length-1?'Replay from the start':`Next: ${CH[S.ch+1].title}`;
+  /* stage setup */
+  applyTrace();
+  $('#hud').style.display=c.sim?'':'none';$('#hudS').style.display=c.spike?'':'none';
+  $('#mark').style.display=c.mark?'':'none';$('#restTxt').style.display=c.rest?'':'none';
+  $('#axonG').style.display=c.axon?'':'none';$('#rain').style.display=c.rain?'':'none';
+  $('#armR').classList.toggle('waving',!!c.wave);
+  S.fDisp=0;
+  /* bind slider/checkbox values */
+  $$('[data-p]').forEach(inp=>{inp.value=S.p[inp.dataset.p];});
+  refreshOuts();updateRead();
+  if(c.key==='quiz'){qi=0;score=0;renderQuiz();}
+  say(c.say,S.ch===0?'cheer':'happy');
+  if(S.ch===0||S.ch===6)setTimeout(()=>{},0);
+  if(c.key==='eq2')renderEq();
+  refreshNudge();
+  window.scrollTo({top:0,behavior:'smooth'});
+  const fi=$('#fi');if(fi)drawFI();
+}
+function refreshOuts(){$$('[data-out]').forEach(o=>{const k=o.dataset.out;o.textContent=FMT[k](S.p[k]);});}
+
+/* ---------------- events ---------------- */
+document.addEventListener('click',e=>{
+  const t=e.target.closest('button');if(!t)return;
+  if(t.id==='tgraph'){S.showTrace=!S.showTrace;applyTrace();return;}
+  if(t.id==='next')return go(S.ch===CH.length-1?0:S.ch+1);
+  if(t.id==='back')return go(S.ch-1);
+  if(t.dataset.eq){acted();return showEq(t.dataset.eq);}
+  const a=t.dataset.act;
+  if(a==='pour')pour();
+  else if(a==='scoop')scoop();
+  else if(a==='eqnext')eqGo(S.eq+1);
+  else if(a==='eqprev')eqGo(S.eq-1);
+  else if(a==='reset'){resetSim();say('Fresh start, empty bucket!','happy');}
+  else if(a==='again'){qi=0;score=0;$('#recap').innerHTML='';renderQuiz();}
+  else if(t.dataset.opt!==undefined&&!answered){
+    answered=true;const Q=QUIZ[qi],i=+t.dataset.opt;
+    $$('.opt').forEach((b,j)=>{b.classList.toggle('ok',j===Q.a);if(j===i&&i!==Q.a)b.classList.add('bad');});
+    if(i===Q.a){score++;setMood('cheer');}else setMood('think');
+    $('#why').textContent=(i===Q.a?'Correct. ':'Not quite. ')+Q.w;
+    $('#qnext').innerHTML=`<button class="btn dark" data-act="qn">${qi===QUIZ.length-1?'See my score':'Next question'}</button>`;
+  }
+  else if(a==='qn'){qi++;renderQuiz();}
+});
+document.addEventListener('input',e=>{
+  const t=e.target;
+  if(t.dataset.p){acted();S.p[t.dataset.p]=+t.value;refreshOuts();onParam(t.dataset.p);}
+});
+document.addEventListener('change',e=>{
+  const t=e.target;
+  acted();
+  if(t.dataset.chk==='chat'){
+    S.chat=t.checked;
+    updateRead();
+    if(CFG().key==='play'){
+      say(S.chat?`Noisy input is on! Like in “Noisy neighbors”, excitatory cups arrive about five times as often as inhibitory scoops. Try the same rain with noise on and off.`:`Noisy input is off. Now the steady rain drives the bucket on its own.`,S.chat?'wow':'happy');
+    }else{
+      say(S.chat?`Now my neighbors are chatting: random cups and scoops. Spikes become irregular, just like in real brains.`:`Quiet again.`,S.chat?'wow':'happy');
+    }
+  }
+});
+document.addEventListener('keydown',e=>{
+  if(e.target.matches('input,textarea,select'))return;
+  if(e.code==='Space'&&$('[data-act="pour"]')&&document.activeElement.tagName!=='BUTTON'){e.preventDefault();pour();}
+});
+
+/* ---------------- rendering ---------------- */
+const rainEl=$('#rain');
+for(let i=0;i<18;i++){
+  const x=240+(i*12.2)+((i*7)%5),dl=-((i*37)%90)/100;
+  rainEl.insertAdjacentHTML('beforeend',`<line class="drop" x1="${x}" y1="-30" x2="${x-4}" y2="-14" stroke="var(--water)" stroke-width="3" stroke-linecap="round" style="animation-delay:${dl}s"/>`);
+}
+const rainLines=[...rainEl.children];
+let colors={};function readColors(){const cs=getComputedStyle(document.documentElement);['ink','muted','line','coral','water','water2','card','soft'].forEach(k=>colors[k]=cs.getPropertyValue('--'+k).trim());}
+readColors();
+
+function updateScene(dt){
+  const c=CFG(),p=S.p;
+  const target=clamp((S.V-VREST)/(VTOP-VREST),0,1.02);
+  S.fDisp+=(target-S.fDisp)*(1-Math.exp(-(S.fast>0?14:8)*dt));S.fast=Math.max(0,S.fast-dt);
+  $('#waterG').setAttribute('transform',`translate(0,${(YB-S.fDisp*HH).toFixed(1)})`);
+  const mY=YB-clamp((p.Vth-VREST)/(VTOP-VREST),0,1)*HH;
+  $('#mark').setAttribute('transform',`translate(0,${mY.toFixed(1)})`);
+  $('#markT2').textContent=`${Math.round(p.Vth)} mV`;
+  $('#markT1').textContent=c.spike?'splash line':'the line';
+  /* leak stream */
+  const above=Math.max(0,S.V-VREST),flow=c.leak?clamp(above/p.tau/1.2,0,1.8):0;
+  const st=$('#stream'),r=clamp(1.5+70/p.tau,3,9);
+  $('#hole').setAttribute('rx',r.toFixed(1));$('#hole').setAttribute('ry',(r*.8).toFixed(1));
+  const on=flow>.03&&S.fDisp>.03;
+  st.setAttribute('stroke-width',on?(1.5+flow*4.5).toFixed(1):0);st.setAttribute('opacity',on?1:0);
+  /* rain */
+  if(c.rain){
+    const forced=performance.now()<S.forceRain;
+    const n=Math.round(clamp(p.I/4,0,1)*rainLines.length)||(forced?8:0);
+    rainLines.forEach((l,i)=>l.style.display=i<n?'':'none');
+    // Chapter 10 uses Chapter 9's gentle default rain-fall speed (0.93 s),
+    // while the rain-strength slider still controls the amount of rain and the neuron.
+    const rainFallSeconds=c.key==='play' ? .93 : 1.0-.55*clamp(p.I/4,0,1);
+    rainEl.style.setProperty('--rd',rainFallSeconds.toFixed(2)+'s');
+    if(forced&&!p.I)rainEl.style.opacity=.55;else rainEl.style.opacity=1;
+  }
+  /* next bucket mini bucket */
+  if(c.axon){S.nextLevel=Math.max(0,S.nextLevel-.04*dt);$('#nextW').setAttribute('y',(250-S.nextLevel*65).toFixed(1));}
+  $('#hudV').textContent=`${S.V.toFixed(1)} mV`;$('#hudN').textContent=S.spikes;
+}
+
+function drawTrace(){
+  const cv=$('#trace'),dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
+  if(!w)return;
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);}
+  const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,w,h);
+  const pl=44,pr=8,pt=8,pb=20,ymin=-80,ymax=-30,c=CFG();
+  const Y=v=>pt+(ymax-v)/(ymax-ymin)*(h-pt-pb);
+  const t1=S.t,t0=t1-S.win,X=t=>pl+(t-t0)/S.win*(w-pl-pr);
+  g.font='600 12px Nunito, sans-serif';g.textAlign='right';g.textBaseline='middle';
+  g.strokeStyle=colors.line;g.fillStyle=colors.muted;g.lineWidth=1;
+  [-70,-60,-50,-40].forEach(v=>{g.beginPath();g.moveTo(pl,Y(v));g.lineTo(w-pr,Y(v));g.stroke();g.fillText(v,pl-6,Y(v));});
+  g.textAlign='left';g.fillText('mV',2,pt+4);
+  g.textAlign='right';g.fillText(`last ${Math.round(S.win)} ms`,w-pr,h-7);
+  if(c.mark){g.strokeStyle=colors.coral;g.lineWidth=2;g.setLineDash([7,5]);g.beginPath();g.moveTo(pl,Y(S.p.Vth));g.lineTo(w-pr,Y(S.p.Vth));g.stroke();g.setLineDash([]);}
+  g.save();g.beginPath();g.rect(pl,0,w-pl,h);g.clip();
+  g.strokeStyle=colors.water;g.lineWidth=3;g.lineJoin='round';g.beginPath();
+  let first=true;
+  for(const [t,v] of S.hist){const x=X(t),y=Y(Math.max(ymin,v));if(first){g.moveTo(x,y);first=false;}else g.lineTo(x,y);}
+  g.lineTo(X(S.t),Y(S.V));g.stroke();
+  g.strokeStyle=colors.coral;g.fillStyle=colors.coral;g.lineWidth=3;
+  for(const t of S.sp){const x=X(t);g.beginPath();g.moveTo(x,Y(S.p.Vth));g.lineTo(x,Y(-33));g.stroke();g.beginPath();g.arc(x,Y(-33),3.5,0,7);g.fill();}
+  g.restore();
+}
+function drawFI(){
+  const cv=$('#fi');if(!cv)return;
+  const dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;if(!w)return;
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);}
+  const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,w,h);
+  const pl=36,pr=10,pt=8,pb=22,{tau,Vth,I}=S.p;
+  let maxR=20;for(let x=0;x<=4;x+=.1)maxR=Math.max(maxR,predRate(x,tau,Vth));maxR=Math.ceil(maxR/20)*20;
+  const X=v=>pl+v/4*(w-pl-pr),Y=r=>pt+(1-r/maxR)*(h-pt-pb);
+  g.font='600 12px Nunito, sans-serif';g.fillStyle=colors.muted;g.strokeStyle=colors.line;g.lineWidth=1;
+  g.textAlign='right';g.textBaseline='middle';
+  [0,maxR/2,maxR].forEach(r=>{g.beginPath();g.moveTo(pl,Y(r));g.lineTo(w-pr,Y(r));g.stroke();g.fillText(Math.round(r),pl-5,Y(r));});
+  g.textAlign='center';g.textBaseline='alphabetic';[0,1,2,3,4].forEach(v=>g.fillText(v,X(v),h-6));
+  g.textAlign='left';g.fillText('Hz',2,pt+6);g.textAlign='right';g.fillText('rain (nA)',w-pr,h-6);
+  g.strokeStyle=colors.water;g.lineWidth=3;g.beginPath();
+  for(let x=0;x<=4.001;x+=.05){const y=Y(predRate(x,tau,Vth));x===0?g.moveTo(X(x),y):g.lineTo(X(x),y);}g.stroke();
+  g.fillStyle=colors.coral;g.beginPath();g.arc(X(I),Y(predRate(I,tau,Vth)),6,0,7);g.fill();
+}
+
+let last=performance.now(),frame=0;
+function loop(ts){
+  const dt=Math.min(.05,(ts-last)/1000);last=ts;frame++;
+  const c=CFG();
+  if(c.sim){
+    let ms=dt*S.speed;while(ms>1e-6){const d=Math.min(DT,ms);stepSim(d);ms-=d;}
+    if(c.mark&&!c.spike){const a=S.V>=S.p.Vth-.01;if(a&&!S.above)onLine();S.above=a;}
+    if(['noise','play'].includes(c.key)&&S.V<VREST-3&&!S.n.below){S.n.below=1;say(`The level dipped below the empty mark! Real neurons can go below rest, like a bucket with a negative level, so my picture bends a little here.`,'wow');}
+  }
+  updateScene(dt);updateMeter();updateBuilder();
+  if(c.trace&&S.showTrace)drawTrace();
+  if($('#fi')&&frame%3===0)drawFI();
+  if(c.key==='play'&&S.chat&&frame%12===0)updateRead();
+  if(frame%120===0)readColors();
+  requestAnimationFrame(loop);
+}
+window.addEventListener('resize',()=>{if($('#fi'))drawFI();});
+if(window.matchMedia)window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',readColors);
+
+go(0);requestAnimationFrame(loop);
+</script>
+</body>
+</html>
